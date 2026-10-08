@@ -1,4 +1,5 @@
 # actualización
+
 import os
 import asyncio
 from collections import defaultdict
@@ -18,6 +19,7 @@ from openai import OpenAI
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
+
 if not TELEGRAM_TOKEN:
     raise ValueError("Falta TELEGRAM_BOT_TOKEN")
 
@@ -25,21 +27,16 @@ if not OPENROUTER_API_KEY:
     raise ValueError("Falta OPENROUTER_API_KEY")
 
 
-# OpenRouter usando la interfaz compatible con OpenAI
 cliente = OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=OPENROUTER_API_KEY,
 )
 
 
-# Modelo gratuito
 MODELO = "openrouter/free"
 
 
-# Guardamos los mensajes de cada grupo
 mensajes = defaultdict(list)
-
-# Guardamos los grupos donde Desmadrita está presente
 grupos = set()
 
 
@@ -51,6 +48,7 @@ def nombre_usuario(user):
 
 
 def preguntar_ia(instrucciones, texto):
+
     respuesta = cliente.chat.completions.create(
         model=MODELO,
         messages=[
@@ -68,7 +66,11 @@ def preguntar_ia(instrucciones, texto):
     return respuesta.choices[0].message.content
 
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+
     await update.message.reply_text(
         "💜🤖 ¡Hola! Soy Desmadrita, la integrante virtual "
         "de Somos un Desmadre.\n\n"
@@ -77,7 +79,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-async def ayuda(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def ayuda(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+
     await update.message.reply_text(
         "💜🤖 DESMADRAITA\n\n"
         "📝 /resumen — hago un resumen del grupo.\n"
@@ -87,7 +93,9 @@ async def ayuda(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def conversar(texto, nombre):
+
     try:
+
         instrucciones = (
             "Sos Desmadrita, una integrante virtual femenina "
             "del grupo de Telegram Somos un Desmadre. "
@@ -104,6 +112,7 @@ async def conversar(texto, nombre):
         )
 
     except Exception as error:
+
         print("Error conversando:", error)
 
         return (
@@ -116,10 +125,12 @@ async def guardar_mensaje(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
+
     if not update.message:
         return
 
     chat_id = update.effective_chat.id
+
     grupos.add(chat_id)
 
     user = update.effective_user
@@ -138,13 +149,14 @@ async def guardar_mensaje(
             f"{nombre}: {texto}"
         )
 
-        # Desmadrita solamente responde cuando le hablan
         texto_minuscula = texto.lower()
 
+        # Desmadrita solamente responde cuando le hablan
         if (
             "@desmadritabot" in texto_minuscula
             or "desmadrita" in texto_minuscula
         ):
+
             respuesta = await conversar(
                 texto,
                 nombre
@@ -154,8 +166,7 @@ async def guardar_mensaje(
                 respuesta
             )
 
-    # Por ahora guardamos los audios como aviso.
-    # La transcripción gratuita la agregaremos después.
+    # Audios
     elif update.message.voice:
 
         mensajes[chat_id].append(
@@ -168,6 +179,7 @@ async def resumen_grupo(
     enviar=True,
     bot=None
 ):
+
     historial = mensajes.get(chat_id, [])
 
     if not historial:
@@ -206,6 +218,7 @@ async def resumen_grupo(
         )
 
         if enviar and bot:
+
             await bot.send_message(
                 chat_id=chat_id,
                 text=mensaje
@@ -218,6 +231,7 @@ async def resumen_grupo(
         print("Error haciendo resumen:", error)
 
         if enviar and bot:
+
             await bot.send_message(
                 chat_id=chat_id,
                 text=(
@@ -231,12 +245,15 @@ async def comando_resumen(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
+
     chat_id = update.effective_chat.id
 
     if not mensajes.get(chat_id):
+
         await update.message.reply_text(
             "🤖💜 Todavía no tengo nada para resumir."
         )
+
         return
 
     await resumen_grupo(
@@ -246,33 +263,24 @@ async def comando_resumen(
     )
 
 
+# Esta función la ejecuta JobQueue cada 5 horas
 async def resumen_automatico(
-    application: Application
+    context: ContextTypes.DEFAULT_TYPE
 ):
-    while True:
 
-        # Esperamos 5 horas
-        await asyncio.sleep(5 * 60 * 60)
-
-        print("📝 Generando resúmenes automáticos...")
-
-        for chat_id in list(grupos):
-
-            if mensajes.get(chat_id):
-
-                await resumen_grupo(
-                    chat_id,
-                    enviar=True,
-                    bot=application.bot
-                )
-
-
-async def iniciar_resumen_automatico(
-    application: Application
-):
-    application.create_task(
-        resumen_automatico(application)
+    print(
+        "📝 Generando resúmenes automáticos..."
     )
+
+    for chat_id in list(grupos):
+
+        if mensajes.get(chat_id):
+
+            await resumen_grupo(
+                chat_id,
+                enviar=True,
+                bot=context.bot
+            )
 
 
 def main():
@@ -280,20 +288,35 @@ def main():
     app = (
         Application.builder()
         .token(TELEGRAM_TOKEN)
-        .post_init(iniciar_resumen_automatico)
         .build()
     )
 
-    app.add_handler(
-        CommandHandler("start", start)
+    # Resumen automático cada 5 horas
+    app.job_queue.run_repeating(
+        resumen_automatico,
+        interval=5 * 60 * 60,
+        first=5 * 60 * 60
     )
 
     app.add_handler(
-        CommandHandler("ayuda", ayuda)
+        CommandHandler(
+            "start",
+            start
+        )
     )
 
     app.add_handler(
-        CommandHandler("resumen", comando_resumen)
+        CommandHandler(
+            "ayuda",
+            ayuda
+        )
+    )
+
+    app.add_handler(
+        CommandHandler(
+            "resumen",
+            comando_resumen
+        )
     )
 
     app.add_handler(
