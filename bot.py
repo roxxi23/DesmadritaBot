@@ -266,7 +266,7 @@ async def resumen_automatico(
                 )
 
 
-def iniciar_resumen_automatico(
+async def iniciar_resumen_automatico(
     application: Application
 ):
     application.create_task(
